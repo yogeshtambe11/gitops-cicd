@@ -1,0 +1,39 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: git-clone
+  namespace: gitops-cicd
+spec:
+  workspaces:
+    - name: output
+      description: Cloned repo workspace
+  params:
+    - name: url
+      type: string
+    - name: revision
+      type: string
+      default: "main"
+  results:
+    - name: commit
+      description: The git commit SHA fetched
+  steps:
+    - name: clone
+      image: alpine/git:2.45.2
+      workingDir: $(workspaces.output.path)
+      env:
+        - name: GITHUB_USER
+          valueFrom:
+            secretKeyRef:
+              name: github-gitops-token
+              key: username
+        - name: GITHUB_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: github-gitops-token
+              key: token
+      script: |
+        rm -rf ./* ./.[!.]*
+        git config --global --add safe.directory $(workspaces.output.path)
+        AUTH_URL=$(echo "$(params.url)" | sed "s|https://|https://${GITHUB_USER}:${GITHUB_TOKEN}@|")
+        git clone --branch $(params.revision) --depth 1 "${AUTH_URL}" .
+        git rev-parse HEAD | tr -d '\n' > $(results.commit.path)

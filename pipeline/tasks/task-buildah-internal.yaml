@@ -1,0 +1,27 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: buildah-internal
+  namespace: gitops-cicd
+spec:
+  params:
+    - name: IMAGE
+      type: string
+    - name: TAG
+      type: string
+  workspaces:
+    - name: source
+  results:
+    - name: IMAGE_DIGEST
+      description: Digest of the produced container image
+  steps:
+    - name: build-and-push
+      image: quay.io/buildah/stable:v1.35.0
+      workingDir: $(workspaces.source.path)/src
+      securityContext:
+        capabilities:
+          add: ["SETFCAP"]
+      script: |
+        buildah --storage-driver=vfs bud --format=docker -t $(params.IMAGE):$(params.TAG) .
+        buildah --storage-driver=vfs push --tls-verify=false $(params.IMAGE):$(params.TAG) docker://$(params.IMAGE):$(params.TAG)
+        buildah --storage-driver=vfs inspect --format '{{.FromImageDigest}}' docker://$(params.IMAGE):$(params.TAG) > $(results.IMAGE_DIGEST.path)

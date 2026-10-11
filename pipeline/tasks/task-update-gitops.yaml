@@ -1,0 +1,50 @@
+
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: update-gitops
+  namespace: gitops-cicd
+spec:
+  params:
+    - name: GITOPS_REPO
+      type: string
+      default: "https://github.com/yogeshtambe11/gitops-cicd.git"
+    - name: NEW_IMAGE_TAG
+      type: string
+  steps:
+    - name: git-update
+      image: alpine/git:2.45.2
+      env:
+        - name: GITHUB_USER
+          valueFrom:
+            secretKeyRef:
+              name: github-gitops-token
+              key: username
+        - name: GITHUB_EMAIL
+          valueFrom:
+            secretKeyRef:
+              name: github-gitops-token
+              key: email
+        - name: GITHUB_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: github-gitops-token
+              key: token
+      script: |
+        git config --global user.email "${GITHUB_EMAIL}"
+        git config --global user.name "${GITHUB_USER}"
+
+        git clone https://${GITHUB_USER}:${GITHUB_TOKEN}@github.com/yogeshtambe11/gitops-cicd.git repo
+        cd repo/gitops/base
+
+        sed -i "s|image: .*:.*|image: image-registry.openshift-image-registry.svc:5000/gitops-cicd/devops-sample-app:$(params.NEW_IMAGE_TAG)|g" deployment.yaml
+
+        git diff deployment.yaml
+        if git diff --quiet; then
+          echo "No image change detected. Nothing to commit."
+          exit 0
+        fi
+
+        git add deployment.yaml
+        git commit -m "ci(gitops): update image tag to $(params.NEW_IMAGE_TAG) [skip ci]"
+        git push origin main
