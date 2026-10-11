@@ -1,0 +1,14 @@
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: devops-sample-app
+  labels:
+    app: devops-sample-app
+spec:
+  to:
+    kind: Service
+    name: devops-sample-app
+  port:
+    targetPort: http
+  tls:
+    termination: edge
