@@ -1,0 +1,13 @@
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  generateName: devops-ci-run-
+  namespace: gitops-cicd
+spec:
+  pipelineRef:
+    name: devops-ci-pipeline
+  serviceAccountName: pipeline-runner
+  workspaces:
+    - name: shared-workspace
+      persistentVolumeClaim:
+        claimName: devops-pipeline-pvc

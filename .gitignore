@@ -4,3 +4,9 @@ __pycache__/
 .pytest_cache/
 venv/
 .env
+
+# Credential protection
+*secret*.yaml
+!pipeline/02-secret-template.yaml
+*.token
+*.key

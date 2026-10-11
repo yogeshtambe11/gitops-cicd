@@ -1,0 +1,79 @@
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: devops-ci-pipeline
+  namespace: gitops-cicd
+spec:
+  params:
+    - name: git-url
+      type: string
+      default: "https://github.com/yogeshtambe11/gitops-cicd.git"
+    - name: git-revision
+      type: string
+      default: "main"
+    - name: image-name
+      type: string
+      default: "image-registry.openshift-image-registry.svc:5000/gitops-cicd/devops-sample-app"
+  workspaces:
+    - name: shared-workspace
+  tasks:
+    - name: clone-source
+      taskRef:
+        name: git-clone
+        kind: Task
+      params:
+        - name: url
+          value: $(params.git-url)
+        - name: revision
+          value: $(params.git-revision)
+      workspaces:
+        - name: output
+          workspace: shared-workspace
+
+    - name: test-app
+      taskRef:
+        name: python-test
+        kind: Task
+      runAfter:
+        - clone-source
+      workspaces:
+        - name: source
+          workspace: shared-workspace
+
+    - name: security-scan
+      taskRef:
+        name: dependency-scan
+        kind: Task
+      runAfter:
+        - clone-source
+      workspaces:
+        - name: source
+          workspace: shared-workspace
+
+    - name: build-image
+      taskRef:
+        name: buildah-internal
+        kind: Task
+      runAfter:
+        - test-app
+        - security-scan
+      params:
+        - name: IMAGE
+          value: $(params.image-name)
+        - name: TAG
+          value: $(tasks.clone-source.results.commit)
+      workspaces:
+        - name: source
+          workspace: shared-workspace
+
+    - name: sync-gitops
+      taskRef:
+        name: update-gitops
+        kind: Task
+      runAfter:
+        - build-image
+      params:
+        - name: GITOPS_REPO
+          value: $(params.git-url)
+        - name: NEW_IMAGE_TAG
+          value: $(tasks.clone-source.results.commit)
