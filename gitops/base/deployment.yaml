@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
       - name: app
-        image: image-registry.openshift-image-registry.svc:5000/gitops-cicd/devops-sample-app:latest
+        image: image-registry.openshift-image-registry.svc:5000/gitops-cicd/devops-sample-app:c796796a8b46a34bfa2df6d52ee0f954dbc853b4
         ports:
         - containerPort: 8080
           name: http
