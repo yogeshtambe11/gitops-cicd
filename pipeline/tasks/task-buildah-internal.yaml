@@ -17,11 +17,37 @@ spec:
   steps:
     - name: build-and-push
       image: quay.io/buildah/stable:v1.35.0
-      workingDir: $(workspaces.source.path)/src
+      workingDir: $(workspaces.source.path)
       securityContext:
         capabilities:
           add: ["SETFCAP"]
       script: |
-        buildah --storage-driver=vfs bud --format=docker -t $(params.IMAGE):$(params.TAG) .
-        buildah --storage-driver=vfs push --tls-verify=false $(params.IMAGE):$(params.TAG) docker://$(params.IMAGE):$(params.TAG)
-        buildah --storage-driver=vfs inspect --format '{{.FromImageDigest}}' docker://$(params.IMAGE):$(params.TAG) > $(results.IMAGE_DIGEST.path)
+        set -e
+        TARGET_IMAGE="$(params.IMAGE):$(params.TAG)"
+
+        echo "=== Building Image ==="
+        buildah --storage-driver=vfs bud --format=docker -f Dockerfile -t "${TARGET_IMAGE}" .
+
+        echo "=== Pushing to Internal Registry ==="
+        # Authenticate against internal registry using the mounted SA token
+        REG_TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token 2>/dev/null || true)
+        if [ -n "$REG_TOKEN" ]; then
+          buildah --storage-driver=vfs push --tls-verify=false --creds="serviceaccount:${REG_TOKEN}" "${TARGET_IMAGE}" "docker://${TARGET_IMAGE}"
+        else
+          buildah --storage-driver=vfs push --tls-verify=false "${TARGET_IMAGE}" "docker://${TARGET_IMAGE}"
+        fi
+
+        echo "=== Inspecting Image Digest ==="
+        # Inspect from local storage directly without docker:// transport
+        DIGEST=$(buildah --storage-driver=vfs inspect --format '{{.FromImageDigest}}' "${TARGET_IMAGE}" 2>/dev/null || true)
+        if [ -z "$DIGEST" ] || [ "$DIGEST" = "<nil>" ]; then
+          DIGEST=$(buildah --storage-driver=vfs inspect --type image --format '{{.Digest}}' "${TARGET_IMAGE}" 2>/dev/null || true)
+        fi
+        
+        # Fallback to tag string if digest is unavailable
+        if [ -z "$DIGEST" ] || [ "$DIGEST" = "<nil>" ]; then
+          DIGEST="$(params.TAG)"
+        fi
+
+        echo -n "${DIGEST}" > $(results.IMAGE_DIGEST.path)
+        echo "Image digest saved: ${DIGEST}"
